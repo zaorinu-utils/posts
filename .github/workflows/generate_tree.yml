@@ -1,4 +1,4 @@
-name: Generate Posts Directory Index (Only on Forks)
+name: Generate HTTP Server Style Index (Inline, Fork Only)
 
 on:
   push:
@@ -8,52 +8,23 @@ on:
 jobs:
   generate-index:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check if repo is a fork
+      - name: Check if fork
         run: |
           if [ "${{ github.event.repository.fork }}" != "true" ]; then
-            echo "Not a fork. Skipping job."
+            echo "Not a fork. Exiting."
             exit 0
           fi
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate static index.html like tree
+      - name: Generate index.html (inline Python)
         run: |
-          echo "<!DOCTYPE html>" > index.html
-          echo "<html><head><meta charset='UTF-8'><title>Posts Index</title><style>body{font-family:monospace;white-space:pre;}</style></head><body>" >> index.html
-          echo "<h2>Posts Directory Structure</h2>" >> index.html
+          python -c "import os, sys; from http.server import SimpleHTTPRequestHandler; from io import BytesIO; class FakeHandler(SimpleHTTPRequestHandler): def __init__(self): self.wfile = BytesIO(); self.path = '/posts'; self.directory = os.getcwd(); def send_response(self, code): pass; def send_header(self, k, v): pass; def end_headers(self): pass; handler = FakeHandler(); handler.list_directory(os.path.join(os.getcwd(), 'posts')); open('index.html','wb').write(handler.wfile.getvalue())"
 
-          generate_tree() {
-            local dir=$1
-            local prefix=$2
-            local items=("$dir"/*)
-            local total=${#items[@]}
-            local count=0
-
-            for path in "${items[@]}"; do
-              ((count++))
-              local connector="├──"
-              if [ $count -eq $total ]; then
-                connector="└──"
-              fi
-              local name=$(basename "$path")
-
-              if [ -f "$path" ]; then
-                echo "${prefix}${connector} <a href=\"$path\">$name</a><br>" >> index.html
-              elif [ -d "$path" ]; then
-                echo "${prefix}${connector} $name/<br>" >> index.html
-                generate_tree "$path" "${prefix}    "
-              fi
-            done
-          }
-
-          generate_tree "posts" ""
-
-          echo "</body></html>" >> index.html
-
-      - name: Commit and push index.html
+      - name: Commit index.html
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "actions@github.com"
