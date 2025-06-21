@@ -1,10 +1,9 @@
-name: Generate HTTP Server Style Index (Inline, Fork Only)
+name: Generate Directory Tree (Node, Single Command, Fork Only)
 
 on:
   push:
     paths:
       - 'posts/**'
-  workflow_dispatch:
 
 jobs:
   generate-index:
@@ -14,16 +13,40 @@ jobs:
       - name: Check if fork
         run: |
           if [ "${{ github.event.repository.fork }}" != "true" ]; then
-            echo "Not a fork. Exiting."
+            echo "Not a fork. Skipping."
             exit 0
           fi
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate index.html (inline Python)
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install directory-tree
+        run: npm install directory-tree
+
+      - name: Generate index.html (single Node.js command)
         run: |
-          python -c "import os, sys; from http.server import SimpleHTTPRequestHandler; from io import BytesIO; class FakeHandler(SimpleHTTPRequestHandler): def __init__(self): self.wfile = BytesIO(); self.path = '/posts'; self.directory = os.getcwd(); def send_response(self, code): pass; def send_header(self, k, v): pass; def end_headers(self): pass; handler = FakeHandler(); handler.list_directory(os.path.join(os.getcwd(), 'posts')); open('index.html','wb').write(handler.wfile.getvalue())"
+          node -e "
+          const fs = require('fs');
+          const tree = require('directory-tree');
+          const render = (node, prefix = '') => {
+            let html = '';
+            if (node.type === 'directory') {
+              html += \`\${prefix}<strong>\${node.name}/</strong><br>\`;
+              (node.children || []).forEach(child => { html += render(child, prefix + '&nbsp;&nbsp;&nbsp;'); });
+            } else {
+              html += \`\${prefix}<a href=\"\${node.path}\">\${node.name}</a><br>\`;
+            }
+            return html;
+          };
+          const data = tree('./posts');
+          const html = \`<!DOCTYPE html><html><head><meta charset='utf-8'><title>Index</title><style>body{font-family:monospace;}</style></head><body>\` + render(data) + '</body></html>';
+          fs.writeFileSync('index.html', html);
+          "
 
       - name: Commit index.html
         run: |
